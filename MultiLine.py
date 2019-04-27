@@ -245,7 +245,7 @@ class MultiClient:
     def check_input(self):
         while True:
             try:
-                t_in = self.input_q.get(True)
+                t_in = self.input_q.get(True,None)
                 self.parse_in_data(t_in)
             except Queue.Empty, e:
                 pass
@@ -329,7 +329,7 @@ class MultiClient:
                 if idx > (len(self.socks) - 1):
                     idx = 0
                 if get_flag:
-                    t_send = self.output_q.get(True)
+                    t_send = self.output_q.get(True,None)
                 t_sock = self.socks[idx]
                 t_sock.sendall(self.pack(t_send))
                 self.pf_log('write line =>' + self.tuple_msg(t_send))

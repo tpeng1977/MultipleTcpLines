@@ -273,7 +273,7 @@ class MultiSwitcher:
     def check_input_q(self):
         while True:
             try:
-                t_in = self.input_q.get(True)
+                t_in = self.input_q.get(True,None)
                 self.parse_input_data(t_in)
             except Queue.Empty, e:
                 pass
@@ -308,7 +308,7 @@ class MultiSwitcher:
                 if idx > (len(self.links) - 1):
                     idx = 0
                 if self.get_flag:
-                    t_send = self.output_q.get(True)
+                    t_send = self.output_q.get(True,None)
                 (sock, magicnumber) = self.links[idx]
                 if magicnumber == t_send[0]:
                     try:
