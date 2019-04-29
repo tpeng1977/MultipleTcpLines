@@ -269,18 +269,45 @@ class MultiClient:
         except Exception, e:
             pass
 
+    def valid_session(self, session_id):
+        for (t_session, sock, w_list) in self.write_out_list:
+            if t_session == session_id:
+                return True
+        return False
+
+    def remove_session(self, session_id):
+        for item in self.write_out_list:
+            t_session, sock, w_list = item
+            if t_session == session_id:
+                try:
+                    sock.shutdown(socket.SHUT_RDWR)
+                except Exception, e:
+                    pass
+                try:
+                    self.write_out_list.remove(item)
+                except Exception, e:
+                    pass
+                sock = None
+                self.pf_log("Remove session: " + ByteToHex(session_id) + "   Finnished.")
+
     def session_write(self, session, sock, write_list):
         idx = 0
-        return_flag = False
+        refresh_time = datetime.datetime.now()
         while True:
             if len(write_list) == 0:
+                if not self.valid_session(session):
+                    return
                 time.sleep(0.3)
                 continue
+            min_idx = 32769
             # (magicnumber, command_str, session_id, cnt, load_data)
             for tuple_data in write_list:
+                if min_idx > tuple_data[3]:
+                    min_idx = tuple_data[3]
                 if tuple_data[3] == idx:
                     if tuple_data[1] == 'data':
                         try:
+                            refresh_time = datetime.datetime.now()
                             sock.sendall(tuple_data[4])
                             write_list.remove(tuple_data)
                             self.pf_log('>>>>>>>>>>>>>>>>>>>>>>session_write->' + self.tuple_msg(tuple_data))
@@ -289,21 +316,14 @@ class MultiClient:
                                 idx = 0
                             break
                         except Exception, e:
-                            return_flag = True
-                    if tuple_data[1] == 'close_session' or return_flag or len(write_list) > 30000:
-                        try:
-                            try:
-                                sock.shutdown(socket.SHUT_WR)
-                            except Exception, e:
-                                pass
-                            try:
-                                self.write_out_list.remove((session, sock, write_list))
-                            except Exception, e:
-                                pass
-                        except Exception, e:
-                            pass
-                        finally:
+                            self.remove_session(session)
                             return
+                    if tuple_data[1] == 'close_session':
+                        self.remove_session(session)
+                        return
+            if (datetime.datetime.now() - refresh_time).total_seconds() > 8 and min_idx != idx:
+                self.remove_session(session)
+                return
 
     def forward_session(self, sock, session):
         try:
@@ -328,7 +348,7 @@ class MultiClient:
         finally:
             try:
                 self.output_q.put((self.magic, 'close_session', session, sn))
-                sock.shutdown(socket.SHUT_RD)
+                sock.shutdown(socket.SHUT_RDWR)
             except Exception, e:
                 pass
 
@@ -355,7 +375,7 @@ class MultiClient:
                 get_flag = False
                 self.pf_log(e)
                 try:
-                    t_sock.close()
+                    t_sock.shutdown(socket.SHUT_RDWR)
                     self.socks.remove(t_sock)
                     time.sleep(0.25)
                 except Exception, e:
@@ -467,7 +487,7 @@ class MultiClient:
             try:
                 self.output_q.put((self.magic, 'close_session', session_uuid, sn))
                 #self.local_clients.remove((client_socket, session_uuid))
-                client_socket.shutdown(socket.SHUT_RD)
+                client_socket.shutdown(socket.SHUT_RDWR)
             except Exception, e:
                 pass
             finally:

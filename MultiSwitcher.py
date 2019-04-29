@@ -324,7 +324,8 @@ class MultiSwitcher:
                         self.get_flag = False
                         self.pf_log(e)
                         try:
-                            sock.close()
+                            sock.shutdown(socket.SHUT_RDWR)
+                            #sock.close()
                             self.links.remove((sock, magicnumber))
                         except Exception, e:
                             pass
@@ -489,7 +490,7 @@ class MultiSwitcher:
                     if tuple_data[1] == 'close_session':
                         self.remove_session(session)
                         return
-            if (datetime.datetime.now()-refresh_time).total_seconds() > 3 and min_idx != idx:
+            if (datetime.datetime.now()-refresh_time).total_seconds() > 8 and min_idx != idx:
                 self.remove_session(session)
                 return
 
