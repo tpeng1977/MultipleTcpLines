@@ -499,7 +499,7 @@ class MultiSwitcher:
                             raise IOError('Client disconnected!')
                         else:
                             continue
-                    client_socket.setblocking(True)
+                    #client_socket.setblocking(True)
                     session_uuid = self.new_uuid()
                     b_new_session = (magic, 'new_session', session_uuid)
                     self.output_q.put(b_new_session)
@@ -529,6 +529,7 @@ class MultiSwitcher:
     def serve_client(self, session_uuid, client_socket, w_list, magic, refresh_time, run_flag):
         inited = False
         client_socket.setblocking(False)
+        client_socket.settimeout(5)
         try:
             sn = 0
             while True:
