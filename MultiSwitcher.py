@@ -485,8 +485,11 @@ class MultiSwitcher:
                 if not self.valid_link_magic(magic):
                     return
                 (b_addr, b_port) = (host, port)
-                dock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                dock_socket.bind((b_addr, b_port))
+                try:
+                    dock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    dock_socket.bind((b_addr, b_port))
+                except Exception, e:
+                    return
                 dock_socket.listen(5)
                 self.binds.append(dock_socket)
                 while True:
