@@ -59,8 +59,8 @@ def PrintUsage():
           "-l local_addr:local_port:remote_addr:remote_port"
     print "command: R forward a local_address:local_port to remote_addr:remote_port"
     print "command: L bind a remote_addr:remote_port to local_addr:local_port"
-    print "Example: MultiLine.py -s localhost:4999 -n 5 -c L -L 127.0.0.1:7080:localhost:80"
-    print "Example: MultiLine.py -s localhost:4999 -n 5 -c R -L 127.0.0.1:80:0.0.0.0:6080"
+    print "Example: MultiLine.py -s localhost:4999 -n 5 -c L -l 127.0.0.1:7080:localhost:80"
+    print "Example: MultiLine.py -s localhost:4999 -n 5 -c R -l 127.0.0.1:80:0.0.0.0:6080"
     print "The above two examples bind remote service to local and bind local service to remote."
     print "Must be used with MultiSwitcher.py"
 
@@ -245,7 +245,7 @@ class MultiClient:
     def check_input(self):
         while True:
             try:
-                t_in = self.input_q.get(True,None)
+                t_in = self.input_q.get(True, None)
                 self.parse_in_data(t_in)
             except Queue.Empty, e:
                 pass
@@ -267,6 +267,7 @@ class MultiClient:
 
     def session_write(self, session, sock, write_list):
         idx = 0
+        return_flag = False
         while True:
             if len(write_list) == 0:
                 time.sleep(0.3)
@@ -284,15 +285,21 @@ class MultiClient:
                                 idx = 0
                             break
                         except Exception, e:
+                            return_flag = True
+                    if tuple_data[1] == 'close_session' or return_flag or len(write_list) > 30000:
+                        try:
                             try:
                                 sock.shutdown(socket.SHUT_WR)
                             except Exception, e:
                                 pass
+                            try:
+                                self.write_out_list.remove((session, sock, write_list))
+                            except Exception, e:
+                                pass
+                        except Exception, e:
+                            pass
+                        finally:
                             return
-                    if tuple_data[1] == 'close_session':
-                        sock.shutdown(socket.SHUT_WR)
-                        self.write_out_list.remove((session, sock, write_list))
-                        return
 
     def forward_session(self, sock, session):
         try:
@@ -324,15 +331,20 @@ class MultiClient:
     def check_output(self):
         idx = 0
         get_flag = True
+        t_send = None
         while True:
             try:
+                if len(self.socks) == 0:
+                    time.sleep(1)
+                    continue
                 if idx > (len(self.socks) - 1):
                     idx = 0
                 if get_flag:
-                    t_send = self.output_q.get(True,None)
+                    t_send = self.output_q.get(True, None)
                 t_sock = self.socks[idx]
-                t_sock.sendall(self.pack(t_send))
-                self.pf_log('write line =>' + self.tuple_msg(t_send))
+                if t_send is not None:
+                    t_sock.sendall(self.pack(t_send))
+                    self.pf_log('write line =>' + self.tuple_msg(t_send))
                 get_flag = True
                 idx += 1
             except Exception, e:
@@ -370,6 +382,7 @@ class MultiClient:
                                 t_reses.remove(t_res)
                                 continue
                             if command == 'new_session':
+                                # todo: Do following in a new thread may result in better performance.
                                 tl_session_id = t_res[2]
                                 tl_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                                 tl_sock.connect((self.rl_link[0], self.rl_link[1]))
@@ -424,10 +437,10 @@ class MultiClient:
                     pass
 
     def serve_client(self, client_socket, session_uuid, ):
+        # start_time = datetime.datetime.now()
+        inited = False
+        sn = 0
         try:
-            #start_time = datetime.datetime.now()
-            inited = False
-            sn = 0
             while True:
                 t_str = client_socket.recv(1024)
                 if not t_str:
