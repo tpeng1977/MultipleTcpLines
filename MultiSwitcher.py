@@ -90,7 +90,8 @@ class MultiSwitcher:
         self.write_out_list = []
         self.get_flag = True
         #write input checker threads to check input
-        self.input_checker = 3
+        self.input_checker = 10
+        self.output_checker = 10
         #print log flag
         self.p_log = True
         #file log flag
@@ -256,7 +257,8 @@ class MultiSwitcher:
                 dock_socket.listen(7)
                 for i in range(self.input_checker):
                     thread.start_new_thread(self.check_input_q, ())
-                thread.start_new_thread(self.check_output_q, ())
+                for i in range(self.output_checker):
+                    thread.start_new_thread(self.check_output_q, ())
                 #thread.start_new_thread(self.check_session, (self.interval,))
                 while True:
                     client_socket = dock_socket.accept()[0]
@@ -308,8 +310,8 @@ class MultiSwitcher:
                 if idx > (len(self.links) - 1):
                     idx = 0
                 if self.get_flag:
-                    t_send = self.output_q.get(True,None)
-                    counter=0
+                    t_send = self.output_q.get(True, None)
+                    counter = 0
                 (sock, magicnumber) = self.links[idx]
                 counter += 1
                 if magicnumber == t_send[0]:
@@ -340,6 +342,12 @@ class MultiSwitcher:
             if magicnumber == magic:
                 res = True
         return res
+
+    def valid_session(self, session_id):
+        for (t_session, sock, w_list, t_magic, refresh_time, run_flag) in self.write_out_list:
+            if t_session == session_id:
+                return True
+        return False
 
     #useless, this make it disconnected at timeout. refresh_time doesn't work.
     def check_session(self, interval):
@@ -440,7 +448,7 @@ class MultiSwitcher:
             t_session, sock, w_list, t_magic, refresh_time, run_flag = item
             if t_session == session_id:
                 try:
-                    sock.shutdown(socket.SHUT_WR)
+                    sock.shutdown(socket.SHUT_RDWR)
                 except Exception, e:
                     pass
                 try:
@@ -452,20 +460,24 @@ class MultiSwitcher:
 
     def session_write(self, session, sock, write_list, t_magic, refresh_time, run_flag):
         idx = 0
+        refresh_time = datetime.datetime.now()
         while True:
-            if sock is None:
-                return
             if len(write_list) == 0:
+                if not self.valid_session(session):
+                    return
                 time.sleep(0.3)
                 continue
+            min_idx = 32769
             #(magicnumber, command_str, session_id, cnt, load_data)
             for tuple_data in write_list:
+                if min_idx > tuple_data[3]:
+                    min_idx = tuple_data[3]
                 if tuple_data[3] == idx:
                     if tuple_data[1] == 'data':
                         try:
+                            refresh_time = datetime.datetime.now()
                             sock.sendall(tuple_data[4])
                             write_list.remove(tuple_data)
-                            refresh_time = datetime.datetime.now()
                             self.pf_log('>>>>>>>>>>>>>>>>>>>>>>session_write->' + self.tuple_msg(tuple_data))
                             idx += 1
                             if idx == 32768:
@@ -477,57 +489,59 @@ class MultiSwitcher:
                     if tuple_data[1] == 'close_session':
                         self.remove_session(session)
                         return
+            if (datetime.datetime.now()-refresh_time).total_seconds() > 3 and min_idx != idx:
+                self.remove_session(session)
+                return
 
     def bind_server(self, magic, host, port):
         """local server at local_addr:local_port. All links are forwarded to remote_addr:remote_port"""
-        while True:
-            try:
-                if not self.valid_link_magic(magic):
-                    return
-                (b_addr, b_port) = (host, port)
-                try:
-                    dock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    dock_socket.bind((b_addr, b_port))
-                except Exception, e:
-                    return
-                dock_socket.listen(5)
-                self.binds.append(dock_socket)
-                while True:
-                    dock_socket.settimeout(5)
-                    try:
-                        client_socket = dock_socket.accept()[0]
-                    except Exception, e:
-                        if not self.valid_link_magic(magic):
-                            # raise error to close the connections.
-                            raise IOError('Client disconnected!')
-                        else:
-                            continue
-                    #client_socket.setblocking(True)
-                    session_uuid = self.new_uuid()
-                    b_new_session = (magic, 'new_session', session_uuid)
-                    self.output_q.put(b_new_session)
-                    self.pf_log('new client added:' + str(client_socket.getpeername()))
-                    refresh_time = datetime.datetime.now()
-                    #(magicnumber, sock, session_id)
-                    run_flag = True
-                    session_list = (session_uuid, client_socket, [], magic, refresh_time, run_flag)
-                    self.write_out_list.append(session_list)
-                    thread.start_new_thread(self.session_write, session_list)
-                    thread.start_new_thread(self.serve_client, session_list)
-                    #todo If magic doesn't exist in the links, this server should be closed.
-            except Exception, e:
-                self.pf_log(e)
-                time.sleep(0.5)
-            finally:
-                try:
-                    dock_socket.close()
-                except Exception, e:
-                    pass
-                try:
-                    self.binds.remove(dock_socket)
-                except Exception, e:
-                    pass
+        try:
+            if not self.valid_link_magic(magic):
                 return
+            (b_addr, b_port) = (host, port)
+            try:
+                dock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                dock_socket.bind((b_addr, b_port))
+            except Exception, e:
+                return
+            dock_socket.listen(5)
+            self.binds.append(dock_socket)
+            while True:
+                dock_socket.settimeout(5)
+                try:
+                    client_socket = dock_socket.accept()[0]
+                except Exception, e:
+                    if not self.valid_link_magic(magic):
+                        # raise error to close the connections.
+                        raise IOError('Client disconnected!')
+                    else:
+                        continue
+                #client_socket.setblocking(True)
+                session_uuid = self.new_uuid()
+                b_new_session = (magic, 'new_session', session_uuid)
+                self.output_q.put(b_new_session)
+                self.pf_log('new client added:' + str(client_socket.getpeername()))
+                refresh_time = datetime.datetime.now()
+                #(magicnumber, sock, session_id)
+                run_flag = True
+                session_list = (session_uuid, client_socket, [], magic, refresh_time, run_flag)
+                self.write_out_list.append(session_list)
+                thread.start_new_thread(self.session_write, session_list)
+                thread.start_new_thread(self.serve_client, session_list)
+                #todo If magic doesn't exist in the links, this server should be closed.
+        except Exception, e:
+            self.pf_log(e)
+            time.sleep(0.5)
+        finally:
+            try:
+                dock_socket.close()
+            except Exception, e:
+                pass
+            try:
+                self.binds.remove(dock_socket)
+            except Exception, e:
+                pass
+            return
 
     def serve_client(self, session_uuid, client_socket, w_list, magic, refresh_time, run_flag):
         inited = False
@@ -561,19 +575,34 @@ class MultiSwitcher:
         finally:
             try:
                 self.output_q.put((magic, 'close_session', session_uuid, sn))
-                client_socket.close(socket.SHUT_RD)
+                self.remove_session(session_uuid)
             except Exception, e:
                 pass
             finally:
                 pass
 
     def forward_session(self, t_session, sock, w_list, t_magic, refresh_time, run_flag):
+        self.serve_client(t_session, sock, w_list, t_magic, refresh_time, run_flag)
+        return
         try:
             inited = False
             sn = 0
+            sock.setblocking(False)
+            sock.settimeout(5)
+            refresh_time = datetime.datetime.now()
             while True:
-                in_data = sock.recv(1024)
+                try:
+                    in_data = sock.recv(1024)
+                except Exception, e:
+                    if not self.valid_session(t_session):
+                        return
+                    continue
                 if not in_data:
+                    raise IOError('Client closed')
+                    now = datetime.datetime.now()
+                    if (now-refresh_time).total_seconds() > 5:
+                        return
+                    time.sleep(0.5)
                     if inited:
                         raise IOError('Client closed')
                 if len(in_data) > 0:
@@ -586,13 +615,13 @@ class MultiSwitcher:
                     if sn == 32768:
                         sn = 0
         except Exception, e:
-            pass
-        finally:
             self.output_q.put((t_magic, 'close_session', t_session, sn))
+        finally:
             try:
-                sock.shutdown(socket.SHUT_RD)
+                self.remove_session(t_session)
             except Exception, e:
                 pass
+            return
 
 if __name__ == '__main__':
     try:

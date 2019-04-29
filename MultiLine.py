@@ -84,8 +84,9 @@ class MultiClient:
         # session write list, sort the disordered packets first. only for data
         # (session_id, sock,  [])  (magic, 'data', sessionid, sn, <data_str>)s are put the list of each id.
         self.write_out_list = []
-        # write input checker4
-        self.input_checker = 3
+        # write input checker threads to check input
+        self.input_checker = 10
+        self.output_checker = 10
         # print log flag
         self.p_log = True
         # file log flag
@@ -233,8 +234,11 @@ class MultiClient:
         for i in range(self.n_lines):
             t_id = thread.start_new_thread(self.a_link, (i, ))
             self.threads.append(t_id)
-        thread.start_new_thread(self.check_output, ())
-        thread.start_new_thread(self.check_input, ())
+        for i in range(self.input_checker):
+            thread.start_new_thread(self.check_input, ())
+        for i in range(self.output_checker):
+            thread.start_new_thread(self.check_output, ())
+
         time.sleep(2)
         if self.cmd == 'L':
             thread.start_new_thread(self.local_server, ())
