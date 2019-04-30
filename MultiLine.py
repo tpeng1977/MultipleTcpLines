@@ -326,6 +326,8 @@ class MultiClient:
                 return
 
     def forward_session(self, sock, session):
+        self.serve_client(sock, session)
+        return
         try:
             #print 'start forward session:' + ByteToHex(session)
             sn = 0

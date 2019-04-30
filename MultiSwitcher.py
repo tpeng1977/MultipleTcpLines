@@ -253,8 +253,9 @@ class MultiSwitcher:
         while True:
             try:
                 dock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                dock_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 dock_socket.bind(('', self.port))
-                dock_socket.listen(7)
+                dock_socket.listen(5)
                 for i in range(self.input_checker):
                     thread.start_new_thread(self.check_input_q, ())
                 for i in range(self.output_checker):
@@ -325,11 +326,11 @@ class MultiSwitcher:
                         self.pf_log(e)
                         try:
                             sock.shutdown(socket.SHUT_RDWR)
-                            #sock.close()
-                            self.links.remove((sock, magicnumber))
                         except Exception, e:
                             pass
-                        finally:
+                        try:
+                            self.links.remove((sock, magicnumber))
+                        except Exception, e:
                             pass
                 if counter > len(self.links):
                     self.get_flag = True
@@ -502,11 +503,14 @@ class MultiSwitcher:
             (b_addr, b_port) = (host, port)
             try:
                 dock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                dock_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 dock_socket.bind((b_addr, b_port))
-            except Exception, e:
+                self.binds.append(dock_socket)
+                dock_socket.listen(5)
+                self.pf_log('Bind at: ' + str((b_addr, b_port)))
+            except Exception, e1:
+                self.pf_log(e1.message)
                 return
-            dock_socket.listen(5)
-            self.binds.append(dock_socket)
             while True:
                 dock_socket.settimeout(5)
                 try:
