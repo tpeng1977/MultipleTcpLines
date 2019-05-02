@@ -589,44 +589,6 @@ class MultiSwitcher:
     def forward_session(self, t_session, sock, w_list, t_magic, refresh_time, run_flag):
         self.serve_client(t_session, sock, w_list, t_magic, refresh_time, run_flag)
         return
-        try:
-            inited = False
-            sn = 0
-            sock.setblocking(False)
-            sock.settimeout(5)
-            refresh_time = datetime.datetime.now()
-            while True:
-                try:
-                    in_data = sock.recv(1024)
-                except Exception, e:
-                    if not self.valid_session(t_session):
-                        return
-                    continue
-                if not in_data:
-                    raise IOError('Client closed')
-                    now = datetime.datetime.now()
-                    if (now-refresh_time).total_seconds() > 5:
-                        return
-                    time.sleep(0.5)
-                    if inited:
-                        raise IOError('Client closed')
-                if len(in_data) > 0:
-                    inited = True
-                    #(magic, cmd, sessionid, sn, <data_str>)
-                    self.output_q.put((t_magic, 'data', t_session, sn, in_data))
-                    refresh_time = datetime.datetime.now()
-                    in_data = ''
-                    sn += 1
-                    if sn == 32768:
-                        sn = 0
-        except Exception, e:
-            self.output_q.put((t_magic, 'close_session', t_session, sn))
-        finally:
-            try:
-                self.remove_session(t_session)
-            except Exception, e:
-                pass
-            return
 
 if __name__ == '__main__':
     try:

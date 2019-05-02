@@ -328,31 +328,6 @@ class MultiClient:
     def forward_session(self, sock, session):
         self.serve_client(sock, session)
         return
-        try:
-            #print 'start forward session:' + ByteToHex(session)
-            sn = 0
-            start_time = datetime.datetime.now()
-            inited = False
-            while True:
-                in_data = sock.recv(1024)
-                if not in_data:
-                    current_time = datetime.datetime.now()
-                    if inited and ((current_time - start_time).total_seconds() > 3):
-                        raise IOError('Client closed')
-                if len(in_data) > 0:
-                    inited = True
-                    self.output_q.put((self.magic, 'data', session, sn, in_data))
-                    sn += 1
-                    if sn == 32768:
-                        sn = 0
-        except Exception, e:
-            self.pf_log(e)
-        finally:
-            try:
-                self.output_q.put((self.magic, 'close_session', session, sn))
-                sock.shutdown(socket.SHUT_RDWR)
-            except Exception, e:
-                pass
 
     def check_output(self):
         idx = 0
